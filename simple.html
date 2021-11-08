@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Firebase_version9_RealtimeDB(G'sACADEMY初学者用サンプル)</title>
+<link rel="stylesheet" href="css/reset.css">
+<link rel="stylesheet" href="css/sample.css">
+</head>
+<body>
+
+<!-- コンテンツ表示画面 -->
+
+<div>
+    <p class="title_txt">森で道に迷ってしまったあなた。日が暮れる前に早く森を抜けよう…。</p>
+    <div class="contents_wrapper">
+        <div class="btn_wrapper">
+            <div class="img_wrapper"><img src="img/2171064.png" alt=""></div>
+            <button id="go_left">左へ進む</button>
+            <button id="go_right">右へ進む</button>
+            <button id="go_top">上へ進む</button>
+            <button id="go_bottom"> 下へ進む</button>
+        </div>
+        <div class="map_wrapper">
+            <table id="map"></table>
+        </div>
+    </div>
+    <div id="output" style="overflow: auto; height: 200px;"></div>
+</div>
+
+<div class="ending_box">
+    <p id="ending_msg" class="ending_msg">無事に森を抜けました。</p>
+    <a href="" class="again">もう一度</a>
+</div>
+
+<!--/ コンテンツ表示画面 -->
+
+
+
+<!-- JQuery -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<!-- JQuery -->
+
+
+<!--** 以下Firebase **-->
+<script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.2.0/firebase-app.js";
+    import { getDatabase, ref, push, set, onChildAdded, onChildChanged, remove, onChildRemoved } 
+    from "https://www.gstatic.com/firebasejs/9.2.0/firebase-database.js";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+  
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyAyrgW3TDn5fWru03Ucj8adJmpUXNMvV-0",
+      authDomain: "sample-74498.firebaseapp.com",
+      projectId: "sample-74498",
+      storageBucket: "sample-74498.appspot.com",
+      messagingSenderId: "875614243586",
+      appId: "1:875614243586:web:acb3169e5c255cc949d01b"
+    };
+  
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    let dbRef = ref(db,"chat");
+    let dbRef_map_get = ref(db,"map");
+    // ユーザーID初期化
+    let uid = "";
+
+    import { getAuth, signInAnonymously, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/9.2.0/firebase-auth.js";
+    const auth = getAuth();
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            // User is signed in, see docs for a list of available properties
+            // https://firebase.google.com/docs/reference/js/firebase.User
+            uid = user.uid;
+            console.log("匿名ログインに成功しました idは" + uid);
+            // map保存用
+            dbRef_map_get = ref(db,"map/" + uid);
+        } else {
+            // User is signed out
+            // ...
+            console.log("匿名ログインに失敗しました");
+        }
+    });
+
+    /*------------------------------------------*/
+
+    // xの添字の最大と最小
+    const MAP_X_MAX = 5;
+    const MAP_X_MIN = 0;
+    // yの添字の最大と最小
+    const MAP_Y_MAX = 5;
+    const MAP_Y_MIN = 0;
+
+    // マップ
+    // 98:start 99:goal
+    // 1:道 0:障害物
+    let t_map = [
+                [98, 1,  0, 1, 1,  1],
+                [ 0, 1,  0, 0, 1,  0],
+                [ 0, 1,  1, 1, 1,  0],
+                [ 1, 1,  1, 1, 0,  0],
+                [ 0, 1,  0, 1, 1, 99],
+                [ 0, 1,  1, 0, 0,  0]];
+    
+    // 最初に読み込むマップ
+    let map = [
+                ["?","?","?","?","?","?"],
+                ["?","?","?","?","?","?"],
+                ["?","?","?","?","?","?"],
+                ["?","?","?","?","?","?"],
+                ["?","?","?","?","?","?"],
+                ["?","?","?","?","?","?"]];
+    
+    // スタートポイント
+    let hero_x = 0;
+    let hero_y = 0;
+    let hero_position_num = t_map[hero_y][hero_x];
+
+    // スタート位置の描画用
+    let now_position = "#map .y_" + hero_y + " .x_"+ hero_x;
+    // インフォメッセージ用    
+    let info_msg = "";
+
+    // マップチェック用
+    let m = map[0][0];
+
+    // クリアフラグ
+    let clear_flg = 0;
+
+    // 読み込み時の処理
+    $(document).ready(function() {
+        // インフォ欄を最新までスクロール
+        $('#output').scrollTop($('#output')[0].scrollHeight);
+    });
+
+    $(document).ready(function() {
+        // マップの読み込み
+        let x_data = "";
+        let y_data = "";
+
+        // 地図データの取り出し
+        map.forEach(function(y, y_index) {
+            y.forEach(function(x, x_index){
+                // x方向
+                x_data += "<td class = x_" + x_index + ">" + x + "</td>";
+            });       
+            // y方向
+            y_data += "<tr class = y_" + y_index + ">"+ x_data +"</tr>";
+            x_data = "";
+
+        });
+        // 地図描画
+        $('#map').append(y_data);
+
+        // 現在位置の地図情報開示
+        open_map(hero_position_num);
+
+        // 現在位置の描画
+        $(now_position).css('background-color','red');
+    });
+
+
+    // 右に移動
+    $("#go_right").on("click",function(){
+
+        // マップ外に移動する場合、進行不可(X軸移動)
+        if (hero_x + 1 < MAP_X_MIN || hero_x + 1 > MAP_X_MAX){
+            console.log("光さえも逃さない深淵が広がっている、これ以上は進めない。");
+            info_msg = "光さえも逃さない深淵が広がっている、これ以上は進めない。";
+
+        } else {
+            // マップ内で移動する場合
+            // x方向に+1移動
+            m = t_map[ hero_y ][ hero_x + 1 ]; //マップチェック用
+
+            // 障害物がある場合進めない
+            if(m == 0){
+                console.log("うっそうとした森が行く手をはばむ。これ以上進めない。");
+                info_msg = "うっそうとした森が行く手をはばむ。これ以上進めない。";
+                // ぶつかった地点の値を「？」から「森」に変更
+                map[hero_y][hero_x + 1 ] = "森";
+                // 地図を再描画
+                print_map();
+                // 現在地表示を更新
+                set_now_position(hero_y,hero_x);
+            
+            }else{
+            // 進行方向（0以外）に進行可能な場合の処理
+                // 現在地表示をリセット
+                clear_now_position();
+                // x方向に+1移動
+                hero_x += 1;
+                hero_position_num = t_map[hero_y][hero_x];
+
+                // 現在地の地図情報の開示
+                open_map(hero_position_num);
+
+                // 現在地表示を更新
+                set_now_position(hero_y,hero_x);
+                    console.log("現在地：["+ hero_y +"]["+ hero_x +"]");
+                    console.log("値："+ hero_position_num);
+                info_msg = "右に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
+
+                // 出口
+                if(m == 99){
+                    info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                    set_clear_db_map();
+                }
+
+            }
+        } 
+        // メッセージ登録処理
+        set_db_msg(info_msg);
+        set_db_map();
+
+    });
+
+    // 左に移動
+    $("#go_left").on("click",function(){
+
+        // マップ外に移動する場合、進行不可(X軸移動)
+        if (hero_x - 1 < MAP_X_MIN || hero_x - 1 > MAP_X_MAX){
+            console.log("光さえも逃さない深淵が広がっている、これ以上は進めない。");
+            info_msg = "光さえも逃さない深淵が広がっている、これ以上は進めない。";
+
+        }else{
+            // マップ内で移動する場合
+            // x方向に-1移動
+            m = t_map[ hero_y ][ hero_x - 1 ]; //マップチェック用
+
+                // 障害物がある場合進めない
+                if(m == 0){
+                    console.log("うっそうとした森が行く手をはばむ。これ以上進めない。");
+                    info_msg = "うっそうとした森が行く手をはばむ。これ以上進めない。";
+                    // ぶつかった地点の値を「？」から「森」に変更
+                    map[hero_y][hero_x - 1 ] = "森";
+                    // 地図を再描画
+                    print_map();
+                    // 現在地表示を更新
+                    set_now_position(hero_y,hero_x);
+                
+                }else{
+                // 進行方向（0以外）に進行可能な場合の処理
+                    // 現在地表示をリセット
+                    clear_now_position();
+                    // x方向に-1移動
+                    hero_x -= 1;
+                    hero_position_num = t_map[hero_y][hero_x];
+
+                    // 現在地の地図情報の開示
+                    open_map(hero_position_num);
+
+                    // 現在地表示を更新
+                    set_now_position(hero_y,hero_x);
+                        console.log("現在地：["+ hero_y +"]["+ hero_x +"]");
+                        console.log("値："+ hero_position_num);
+                    info_msg = "左に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
+
+                    // 出口
+                    if(m == 99){
+                        info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                        set_clear_db_map();
+                    }
+
+                }
+        }        
+        set_db_msg(info_msg);
+        set_db_map();
+    });
+
+    // 上に移動
+    $("#go_top").on("click",function(){
+
+        // マップ外に移動する場合、進行不可(Y軸移動)
+        if (hero_y - 1 < MAP_Y_MIN || hero_y - 1 > MAP_Y_MAX){
+            console.log("光さえも逃さない深淵が広がっている、これ以上は進めない。");
+            info_msg = "光さえも逃さない深淵が広がっている、これ以上は進めない。";
+        }else{
+            // マップ内で移動する場合
+            // y方向に-1移動
+            m = t_map[hero_y - 1][ hero_x ]; //マップチェック用
+
+                // 障害物がある場合進めない
+                if(m == 0){
+                    console.log("うっそうとした森が行く手をはばむ。これ以上進めない。");
+                    info_msg = "うっそうとした森が行く手をはばむ。これ以上進めない。";
+                    // ぶつかった地点の値を「？」から「森」に変更
+                    map[hero_y - 1 ][hero_x] = "森";
+                    // 地図を再描画
+                    print_map();
+                    // 現在地表示を更新
+                    set_now_position(hero_y,hero_x);
+                
+                }else{
+                // 進行方向（0以外）進行可能な場合の処理
+                    // 現在地表示をリセット
+                    clear_now_position();
+                    // y方向に-1移動
+                    hero_y -= 1;
+                    hero_position_num = t_map[hero_y][hero_x];
+
+                    // 現在地の地図情報の開示
+                    open_map(hero_position_num);
+
+                    // 現在地表示を更新
+                    set_now_position(hero_y,hero_x);
+                        console.log("現在地：["+ hero_y +"]["+ hero_x +"]");
+                        console.log("値："+ hero_position_num);
+                    info_msg = "上に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
+
+                    // 出口
+                    if(m == 99){
+                        info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                        set_clear_db_map();
+                    }
+
+                }
+        }
+
+        // メッセージ登録処理
+        set_db_msg(info_msg);
+        set_db_map();
+    });
+
+    // 下に移動
+    $("#go_bottom").on("click",function(){
+
+        // マップ外に移動する場合、進行不可(Y軸移動)
+        if (hero_y + 1 < MAP_Y_MIN || hero_y + 1 > MAP_Y_MAX){
+            console.log("光さえも逃さない深淵が広がっている、これ以上は進めない。");
+            info_msg = "光さえも逃さない深淵が広がっている、これ以上は進めない。";
+        }else{
+            // マップ内で移動する場合
+            // y方向に+1移動
+            m = t_map[hero_y + 1][ hero_x ]; //マップチェック用
+
+                // 障害物がある場合進めない
+                if(m == 0){
+                    console.log("うっそうとした森が行く手をはばむ。これ以上進めない。");
+                    info_msg = "うっそうとした森が行く手をはばむ。これ以上進めない。";
+                    // ぶつかった地点の値を「？」から「森」に変更
+                    map[hero_y + 1 ][hero_x] = "森";
+                    // 地図を再描画
+                    print_map();
+                    // 現在地表示を更新
+                    set_now_position(hero_y,hero_x);
+                
+                }else{
+                // 進行方向（0以外）進行可能な場合の処理
+                    // 現在地表示をリセット
+                    clear_now_position();
+                    // y方向に+1移動
+                    hero_y += 1;
+                    hero_position_num = t_map[hero_y][hero_x];
+
+                    // 現在地の地図情報の開示
+                    open_map(hero_position_num);
+                    
+                    // 現在地表示を更新
+                    set_now_position(hero_y,hero_x);
+                        console.log("現在地：["+ hero_y +"]["+ hero_x +"]");
+                        console.log("値："+ hero_position_num);
+                    info_msg = "下に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
+
+                    // 出口
+                    if(m == 99){
+                        info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                        set_clear_db_map();
+                    }
+
+                }
+        }
+
+        // メッセージ登録処理
+        set_db_msg(info_msg);
+
+        set_db_map();
+    });
+    /*------------------------------------------*/
+
+    function clear_now_position(){
+        // 地図：現在地表示リセット
+        $(now_position).css('background-color','unset');
+    }
+    function set_now_position(hero_y,hero_x){
+        // 地図：現在地をセット
+        // 値の更新
+        now_position = "#map .y_" + hero_y + " .x_"+ hero_x;
+        $(now_position).css('background-color','red');
+    }
+
+    function open_map(hero_position_num){
+        // 現在地の地図情報の開示 
+            // hero_position_num が 1 だった場合
+            if (hero_position_num == 1){
+                // 今いる地点の値を「？」から「道」に変更
+                map[hero_y][hero_x] = "道";
+                // 地図を再描画
+                print_map();
+
+            } else if (hero_position_num == 99) {
+                // 今いる地点の値を「？」から「出」に変更
+                map[hero_y][hero_x] = "出";
+                // 地図を再描画
+                print_map();
+
+            } else if (hero_position_num == 98) {
+                // 今いる地点の値を「？」から「S」に変更
+                map[hero_y][hero_x] = "S";
+                // 地図を再描画
+                print_map();
+
+            } else {
+                // それ以外
+            }      
+    }
+
+    function print_map(){
+        // 地図を再描画
+        // 要素を空にする
+        $('#map').empty();
+        // マップの読み込み
+        let x_data = "";
+        let y_data = "";
+
+        // 地図データの取り出し
+        map.forEach(function(y, y_index) {
+            y.forEach(function(x, x_index){
+                // x方向
+                x_data += "<td class = x_" + x_index + ">" + x + "</td>";
+            });       
+            // y方向
+            y_data += "<tr class = y_" + y_index + ">"+ x_data +"</tr>";
+            x_data = "";
+
+        });
+        // 地図描画
+        $('#map').append(y_data);
+    }
+
+    function set_db_msg(info_msg){
+        // メッセージ登録処理
+        const msg = {
+            text : info_msg,
+            user_id : uid
+        }
+        const newPostRef = push(dbRef);
+        set(newPostRef,msg);
+    }
+
+    function set_db_map(){
+        // 位置データをdbに登録
+        const position = {
+            hero_y : hero_y,
+            hero_x : hero_x,
+            user_id : uid,
+            map : map,
+            clear_game : clear_flg
+        }
+        // dbに登録
+        set(dbRef_map_get,position);
+
+        // クリアフラグを戻す
+        if(clear_flg == 1){
+            clear_flg = 0;
+        }
+    }
+
+    function set_clear_db_map(){
+        // マップ情報と位置データのクリア用処理
+        clear_flg = 1;
+    }
+    /*------------------------------------------*/
+
+    onChildAdded(dbRef,function(data){
+        const msg = data.val();
+        const key = data.key;
+        
+        // インフォ欄
+        // uidが等しい情報だけ表示
+        if(msg.user_id === uid){
+            let h = '<p>';
+            h += msg.text;
+            h += '</p>';
+            $('#output').append(h);
+            // インフォ欄を一番下までスクロールする
+            $('#output').scrollTop($('#output')[0].scrollHeight);
+        }
+    });
+
+    onChildChanged(dbRef_map_get,function(data){
+        // 出口に辿り着いた時のマップ初期化
+        const u = data.val().user_id;
+            if( u == uid ){
+                // console.log("changedを検知しました。");
+                // console.log("onChildAddedのクリアフラグは"+data.val().clear_game);
+
+                if(data.val().clear_game == 1){
+                    // 情報の読み込み
+                    // 地図の再描画
+                    print_map();
+                    // 現在地情報のクリア
+                    clear_now_position();
+                    // 現在地を再描画
+                    set_now_position(hero_y,hero_x);
+                    
+                    console.log("ゲームをクリアしたので初期化します");
+                    // 初期化用マップ
+                    let c_map = [
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"]];
+                    hero_y = 0;
+                    hero_x = 0;
+                    map = c_map;
+                    map[hero_y][hero_x] = "S";
+                    
+                    $(".ending_box").css('z-index','999');
+                    $(".ending_box").fadeIn(1000);
+                }
+            }
+    });
+
+    onChildAdded(dbRef_map_get,function(data){
+        // ページ読み込み時のマップ初期化
+        const u = data.val().user_id;
+            if( u == uid ){
+                hero_y = data.val().hero_y;
+                hero_x = data.val().hero_x;
+                map = data.val().map;
+
+                // 地図読み込み時のマップ初期化
+                if(data.val().clear_game == 1){
+                    console.log("ゲームをクリアしたので初期化します");
+                    // 初期化用マップ
+                    let c_map = [
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"],
+                            ["?","?","?","?","?","?"]];
+                    hero_y = 0;
+                    hero_x = 0;
+                    map = c_map;
+                    map[hero_y][hero_x] = "S";
+                }
+
+                // 情報の読み込み
+                    // 地図の再描画
+                    print_map();
+                    // 現在地情報のクリア
+                    clear_now_position();
+                    // 現在地を再描画
+                    set_now_position(hero_y,hero_x);
+            }
+    });
+
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
