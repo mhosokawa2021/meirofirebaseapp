@@ -19,6 +19,7 @@
             <button id="go_right">右へ進む</button>
             <button id="go_top">上へ進む</button>
             <button id="go_bottom"> 下へ進む</button>
+            <button id="check_btn" class="check_btn">調べる</button>
         </div>
         <div class="map_wrapper">
             <table id="map"></table>
@@ -69,7 +70,18 @@
     let uid = "";
 
     import { getAuth, signInAnonymously, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/9.2.0/firebase-auth.js";
+    
     const auth = getAuth();
+    signInAnonymously(auth)
+        .then(() => {
+            // Signed in..
+        })
+        .catch((error) => {
+            const errorCode = error.code;
+            const errorMessage = error.message;
+            // ...
+        });
+
     onAuthStateChanged(auth, (user) => {
         if (user) {
             // User is signed in, see docs for a list of available properties
@@ -85,6 +97,8 @@
         }
     });
 
+    
+
     /*------------------------------------------*/
 
     // xの添字の最大と最小
@@ -98,7 +112,7 @@
     // 98:start 99:goal
     // 1:道 0:障害物
     let t_map = [
-                [98, 1,  0, 1, 1,  1],
+                [98, 1,  0, 1, 1,  5],
                 [ 0, 1,  0, 0, 1,  0],
                 [ 0, 1,  1, 1, 1,  0],
                 [ 1, 1,  1, 1, 0,  0],
@@ -129,6 +143,8 @@
 
     // クリアフラグ
     let clear_flg = 0;
+    // 鍵フラグ
+    let g_key = 0;
 
     // 読み込み時の処理
     $(document).ready(function() {
@@ -200,14 +216,19 @@
 
                 // 現在地表示を更新
                 set_now_position(hero_y,hero_x);
-                    console.log("現在地：["+ hero_y +"]["+ hero_x +"]");
-                    console.log("値："+ hero_position_num);
+                console.log("現在地：["+ hero_y +"]["+ hero_x +"]");
+                console.log("値："+ hero_position_num);
                 info_msg = "右に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
 
                 // 出口
                 if(m == 99){
-                    info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                    info_msg = "あなたは森を抜け無事出口に辿り着いた。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
                     set_clear_db_map();
+                }
+
+                // ここに鍵マップのメッセージ
+                if (m == 5 && g_key == 0) {
+                    info_msg = "あなたは何かに足をひっかけてつまづいた。現在地：[" + hero_y + "][" + hero_x + "]";
                 }
 
             }
@@ -260,9 +281,14 @@
                     info_msg = "左に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
 
                     // 出口
-                    if(m == 99){
-                        info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                    if (m == 99) {
+                        info_msg = "あなたは森を抜け無事出口に辿り着いた。おめでとう。現在地：[" + hero_y + "][" + hero_x + "]";
                         set_clear_db_map();
+                    }
+
+                    // ここに鍵マップのメッセージ
+                    if (m == 5 && g_key == 0) {
+                        info_msg = "あなたは何かに足をひっかけてつまづいた。現在地：[" + hero_y + "][" + hero_x + "]";
                     }
 
                 }
@@ -312,9 +338,14 @@
                     info_msg = "上に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
 
                     // 出口
-                    if(m == 99){
-                        info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                    if (m == 99) {
+                        info_msg = "あなたは森を抜け無事出口に辿り着いた。おめでとう。現在地：[" + hero_y + "][" + hero_x + "]";
                         set_clear_db_map();
+                    }
+
+                    // ここに鍵マップのメッセージ
+                    if (m == 5 && g_key == 0) {
+                        info_msg = "あなたは何かに足をひっかけてつまづいた。現在地：[" + hero_y + "][" + hero_x + "]";
                     }
 
                 }
@@ -366,9 +397,14 @@
                     info_msg = "下に一歩進んだ。現在地：["+ hero_y +"]["+ hero_x +"]";
 
                     // 出口
-                    if(m == 99){
-                        info_msg = "出口に辿り着いたようだ。おめでとう。現在地：["+ hero_y +"]["+ hero_x +"]";
+                    if (m == 99) {
+                        info_msg = "あなたは森を抜け無事出口に辿り着いた。おめでとう。現在地：[" + hero_y + "][" + hero_x + "]";
                         set_clear_db_map();
+                    }
+
+                    // ここに鍵マップのメッセージ
+                    if (m == 5 && g_key == 0) {
+                        info_msg = "あなたは何かに足をひっかけてつまづいた。現在地：[" + hero_y + "][" + hero_x + "]";
                     }
 
                 }
@@ -376,8 +412,33 @@
 
         // メッセージ登録処理
         set_db_msg(info_msg);
-
         set_db_map();
+        
+    });
+    
+    // チェックボタン
+    $("#check_btn").on("click", function(){
+        console.log("チェックボタンが押されました");
+        if(hero_position_num == 5 && g_key != 1){
+            info_msg = "「あなたは金色の鍵」をひろった！！"
+            g_key = 1;
+            // メッセージ登録処理
+            set_db_msg(info_msg);
+            // アイテムマップ開示
+            open_map_item(hero_position_num);
+            set_db_map();
+
+            // 地図を再描画
+            print_map();
+            // 現在地表示を更新
+            set_now_position(hero_y, hero_x);
+            
+
+        } else {
+            info_msg = "何もなかった。"
+            // メッセージ登録処理
+            set_db_msg(info_msg);
+        }
     });
     /*------------------------------------------*/
 
@@ -415,7 +476,23 @@
 
             } else {
                 // それ以外
+                // まだ鍵を持っていない場合
+                if(g_key == 0){
+                    // 今いる地点の値を「？」から「道」に変更
+                    map[hero_y][hero_x] = "道";
+                    // 地図を再描画
+                    print_map();
+                }
             }      
+    }
+
+    function open_map_item(hero_position_num){
+        if (hero_position_num == "5") {
+            // 今いる地点の値を「？」から「鍵」に変更
+            map[hero_y][hero_x] = "鍵";
+            // 地図を再描画
+            print_map();
+        }
     }
 
     function print_map(){
@@ -458,7 +535,8 @@
             hero_x : hero_x,
             user_id : uid,
             map : map,
-            clear_game : clear_flg
+            clear_game : clear_flg,
+            g_key : g_key
         }
         // dbに登録
         set(dbRef_map_get,position);
@@ -475,6 +553,7 @@
     }
     /*------------------------------------------*/
 
+    // インフォ枠の表示
     onChildAdded(dbRef,function(data){
         const msg = data.val();
         const key = data.key;
@@ -491,24 +570,26 @@
         }
     });
 
+    // ゴール時の処理
     onChildChanged(dbRef_map_get,function(data){
-        // 出口に辿り着いた時のマップ初期化
+        // データ取得
         const u = data.val().user_id;
             if( u == uid ){
                 // console.log("changedを検知しました。");
                 // console.log("onChildAddedのクリアフラグは"+data.val().clear_game);
 
+                // クリア判定後処理
                 if(data.val().clear_game == 1){
                     // 情報の読み込み
                     // 地図の再描画
                     print_map();
                     // 現在地情報のクリア
                     clear_now_position();
-                    // 現在地を再描画
+                    // 現在地を再描画（ゴール地点の表示）
                     set_now_position(hero_y,hero_x);
                     
                     console.log("ゲームをクリアしたので初期化します");
-                    // 初期化用マップ
+                    // 初期化処理
                     let c_map = [
                             ["?","?","?","?","?","?"],
                             ["?","?","?","?","?","?"],
@@ -520,22 +601,27 @@
                     hero_x = 0;
                     map = c_map;
                     map[hero_y][hero_x] = "S";
+                    g_key = 0;
                     
+                    // ゲームクリアメッセージ
                     $(".ending_box").css('z-index','999');
                     $(".ending_box").fadeIn(1000);
                 }
             }
     });
 
+    // ページ更新時処理
     onChildAdded(dbRef_map_get,function(data){
-        // ページ読み込み時のマップ初期化
+        // ページ更新時の保存データ読み込み
         const u = data.val().user_id;
+            // ユーザーidを元にデータ取得
             if( u == uid ){
                 hero_y = data.val().hero_y;
                 hero_x = data.val().hero_x;
                 map = data.val().map;
+                g_key = data.val().g_key;
 
-                // 地図読み込み時のマップ初期化
+                // 既にゲームをクリアしている場合
                 if(data.val().clear_game == 1){
                     console.log("ゲームをクリアしたので初期化します");
                     // 初期化用マップ
@@ -550,6 +636,7 @@
                     hero_x = 0;
                     map = c_map;
                     map[hero_y][hero_x] = "S";
+                    g_key = 0;
                 }
 
                 // 情報の読み込み
