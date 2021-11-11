@@ -184,16 +184,27 @@ button{
     border-radius: 5px;
 }
 
+button:hover{
+    background-color: white;
+    color: black;
+}
+
+.check_btn{
+    width: 82.5%;
+    margin-top: 8px;
+}
+
 .contents_wrapper {
     display: flex;
     justify-content: center;
-    align-items: flex-end;
+    align-items: center;
     margin-top: 20px;
     margin-bottom: 20px;
 }
 
 .btn_wrapper{
     margin-right: 25px;
+    text-align: center;
 }
 
 .img_wrapper{
@@ -201,7 +212,7 @@ button{
 }
 
 .img_wrapper img{
-    width: 70%;
+    width: 60%;
     vertical-align: center;
     margin: 0 auto;
     margin-bottom: 16px;
